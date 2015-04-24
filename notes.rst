@@ -321,3 +321,48 @@ then override that method to return whatever is needed by the test::
             Assert.True(result);
         }
     }
+
+Mocks
+-----
+
+* The basic difference between stubs and mocks is that
+  stubs can't fail tests, mocks can.
+
+* Create a mock by first creating an interface (as with a stub)::
+
+    public interface IWebService
+    {
+        void LogError(string message);
+    }
+
+* Implement the mock::
+
+    public class FakeWebService : IWebService
+    {
+        public string LastError;
+
+        public void LogError(string message)
+        {
+            LastError = message;
+        }
+    }
+
+* Use it in a test::
+
+    [Test]
+    public void Analyze_TooShortFileName_CallsWebService()
+    {
+        FakeWebService mockService = new FakeWebService();
+        LogAnalyzer log = new LogAnalyzer(mockService);
+
+        log.Analyze("abc.txt");
+
+        StringAssert.Contains("Filename too short:abc.ext",
+            mockService.LastError);
+    }
+
+* In the example on p. 81, the web service is a stub
+  because we need it to throw an exception (not test the web service),
+  so that we test whether the log analyzer e-mails the log.
+  The e-mail service is a mock because we need to test
+  whether the e-mail was sent.

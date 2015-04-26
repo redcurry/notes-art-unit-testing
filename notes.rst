@@ -366,3 +366,83 @@ Mocks
   so that we test whether the log analyzer e-mails the log.
   The e-mail service is a mock because we need to test
   whether the e-mail was sent.
+
+Mocking frameworks
+------------------
+
+* Using NSubstitute::
+
+    [Test]
+    public void Analyze_tooShortFileName_CallLogger()
+    {
+        ILogger logger = Substitute.For<ILogger>();
+        LogAnalyzer analyzer = new LogAnalyzer(logger);
+
+        analyzer.MinNameLength = 6;
+        analyzer.Analyze("a.txt");
+
+        logger.Received().LogError("Filename too short: a.txt");
+    }
+
+* `Received()` is used to test whether `LogError` was called on `logger`.
+
+* Make a fake object always return a specific value::
+
+    // Create fake object
+    IFileNameRules fakeRules = Substitute.For<IFileNameRules>();
+
+    // With the exact parameter given
+    fakeRules.IsValidLogFileName("strict.txt").Returns(true);
+
+    // With any parameter
+    fakeRules.IsValidLogFileName(Arg.Any<String>()).Returns(true);
+
+    // Assertion
+    Assert.IsTrue(fakeRules.IsValidLogFileName("strict.txt"));
+
+* Simulate an exception::
+
+    fakeRules.When(x => x.IsValidLogFileName(Arg.Any<String>()))
+             .Do(context => { throw new Exception("fake exception"); });
+
+    Assert.Throws<Exception>(() => fakeRules.IsValidLogFileName("anything"));
+
+  Me: How is this useful? If you're setting up IsValidLogFileName
+  to throw an exception, then why are you testing that it does?
+  The point is not to test whether the isolation framework works.
+
+* A more complex example where the logger should send a message
+  to the web service if it throws an execption::
+
+    [Test]
+    public void analyze_LoggerThrows_CallsWebService()
+    {
+        var mockWebService = Substitute.For<IWebService>();
+        var stubLogger = Substitute.For<ILogger>();
+        stubLogger.When(logger => logger.LogError(Arg.Any<string>()))
+                  .Do(info => { throw new Exception("fake exception"); });
+
+        var analyzer = new LogAnalyzer(stubLogger, mockWebService);
+        analyzer.MinNameLength = 10;
+        analyzer.Analyze("Short.txt");
+
+        mockWebService.Received()
+            .Write(Arg.Is<string>(s => s.Contains("fake exeption")));
+    }
+
+  The assertion uses "argument-matching."
+
+* A more complex argument matching if instead of a string,
+  it is an `ErrorInfo` with `severity` and `message` properties::
+
+    mockWebService.Received()
+        .Write(Arg.Is<ErrorInfo>(info => info.Severity == 1000 &&
+            info.Message.Contains("fake execption")));
+
+* Perhaps a more readable test would compare `ErrorInfo` objects::
+
+    var expected = new ErrorInfo(1000, "fake exception");
+    mockWebService.Received().Write(expected);
+
+  But the `Equals()` methods on `ErrorInfo` needs to have been
+  implemented correctly.
